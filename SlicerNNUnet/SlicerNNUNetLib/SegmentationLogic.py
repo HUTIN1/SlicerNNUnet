@@ -1,7 +1,9 @@
 import os
 import sys
 from pathlib import Path
+import shutil
 from typing import Protocol, List, Optional, Callable
+import SimpleITK as sitk
 
 import qt
 import slicer
@@ -9,6 +11,10 @@ import slicer
 from .Parameter import Parameter
 from .Signal import Signal
 
+
+def copyfile(src,dst):
+    img = sitk.ReadImage(src)
+    sitk.WriteImage(img,dst)
 
 class SegmentationLogicProtocol(Protocol):
     """
@@ -153,6 +159,13 @@ class SegmentationLogic:
                 "Something went wrong during the nnUNet processing.\n"
                 "Please check the logs for potential errors and contact the library maintainers."
             )
+        
+    def moveSegmentationFromNNUNetToFolder(self,outputFolder):
+        self.progressInfo(f"Transferring nnUNet results in {self._tmpDir.path()}\n")
+        for idx, data in enumerate(self.d):
+            name = data['raw'].split('.')[0]
+            copyfile(self.nnUNetOutDir.joinpath(data['nnUNet']),os.path.join(outputFolder,name+'.seg.nrrd'))
+            self.progressInfo(f"{idx+1}/{len(self.d)} Segmentation have been Transferred\n")
 
     def _renameSegments(self, segmentationNode: "slicer.vtkMRMLSegmentationNode") -> None:
         """
@@ -233,9 +246,33 @@ class SegmentationLogic:
 
         # Name of the volume should match expected nnUNet conventions
         self.progressInfo(f"Transferring volume to nnUNet in {self._tmpDir.path()}\n")
+        return self._preprareInferenceDirBatch(volumeNode) if isinstance(volumeNode,str) else self._prepareInferenceDirVolume(volumeNode)
+    
+    def _prepareInferenceDirVolume(self,volumeNode):
         volumePath = self.nnUNetInDir.joinpath(f"volume_0000{self._fileEnding}")
         slicer.util.exportNode(volumeNode, volumePath)
         return volumePath.exists()
+    
+    def _preprareInferenceDirBatch(self, folderPath) -> bool :
+        listVolumePath = [volumePath for volumePath in os.listdir(folderPath) if os.path.isfile(os.path.join(folderPath,volumePath))]
+
+        self.progressInfo(f"0/{len(listVolumePath)} Volume are transferring to nnUNet\n")
+        self.d = []
+        _fileEnding = self._fileEnding
+        for idx, volumePath in enumerate(listVolumePath):
+            newName = f'Volume_{idx}_0000{self._fileEnding}'
+            nameSeg = f'Volume_{idx}{self._fileEnding}'
+            self.d.append({
+                'raw':volumePath,
+                'nnUNet':nameSeg
+            })
+            extension = '.'.join(volumePath.split('.')[1:])
+            if extension == _fileEnding:
+                shutil.copyfile(os.path.join(folderPath,volumePath), self.nnUNetInDir.joinpath(newName))
+            else :
+                copyfile(os.path.join(folderPath,volumePath),self.nnUNetInDir.joinpath(newName))
+            self.progressInfo(f"{idx+1}/{len(listVolumePath)} Volume are transferring to nnUNet\n")
+        return len(listVolumePath)
 
     @property
     def _fileEnding(self):
@@ -291,3 +328,6 @@ class Process:
         info = qt.QTextCodec.codecForUtfText(stream).toUnicode(stream)
         if info:
             outSignal(info)
+
+
+

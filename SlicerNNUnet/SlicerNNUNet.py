@@ -8,10 +8,10 @@ from SlicerNNUNetLib import Widget
 class SlicerNNUNet(ScriptedLoadableModule):
     def __init__(self, parent):
         ScriptedLoadableModule.__init__(self, parent)
-        self.parent.title = _("nnUNet")
+        self.parent.title = _("nnUNet_NH")
         self.parent.categories = [translate("qSlicerAbstractCoreModule", "Segmentation")]
         self.parent.dependencies = []
-        self.parent.contributors = ["Thibault Pelletier (Kitware SAS)"]
+        self.parent.contributors = ["Thibault Pelletier (Kitware SAS), Nathan Hutin (Creatis / Liris)"]
         self.parent.helpText = _(
             "This extension is meant to streamline the integration of nnUnet based models into 3D Slicer.<br>"
             "It allows for quick and reliable nnUNet dependency installation in 3D Slicer environment and provides"

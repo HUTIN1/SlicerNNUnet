@@ -1,6 +1,7 @@
 import traceback
 from pathlib import Path
 from typing import Optional
+import os
 
 import qt
 import slicer
@@ -51,6 +52,8 @@ class Widget(qt.QWidget):
 
         self.ui.stopButton.setIcon(self.icon("stop_icon.png"))
         self.ui.stopButton.clicked.connect(self.onStopClicked)
+
+        self.ui.comboBox.currentIndexChanged.connect(self._changePage)
 
         # Logic connection
         self.logic.inferenceFinished.connect(self.onInferenceFinished)
@@ -157,8 +160,14 @@ class Widget(qt.QWidget):
         self._setApplyVisible(True)
 
     def onApply(self, *_):
-        if self.getCurrentVolumeNode() is None:
+
+        print(f'input {self.ui.inputFolder.text}, output {self.ui.outputFolder.text}')
+        if self.ui.comboBox.currentIndex == 0 and self.getCurrentVolumeNode() is None:
             self._reportError("Please select a valid volume to proceed.")
+            return
+        
+        elif self.ui.comboBox.currentIndex == 1 and not os.path.isdir(self.ui.outputFolder.text) and not os.path.isdir(self.ui.inputFolder.text):
+            self._reportError("Please select a valid input / output Folder")
             return
 
         self.ui.logTextEdit.clear()
@@ -187,7 +196,7 @@ class Widget(qt.QWidget):
 
         self._parameterNode.parameter.toSettings()
         self.logic.setParameter(self._parameterNode.parameter)
-        self.logic.startSegmentation(self.getCurrentVolumeNode())
+        self.logic.startSegmentation(self.getCurrentVolumeNode() if self.ui.comboBox.currentIndex == 0 else self.ui.inputFolder.text)
 
     def onInputChanged(self, *_):
         self.ui.applyButton.setEnabled(self.getCurrentVolumeNode() is not None)
@@ -201,9 +210,13 @@ class Widget(qt.QWidget):
             return
 
         try:
-            self.onProgressInfo("Loading inference results...")
-            segmentation = self.logic.loadSegmentation()
-            segmentation.SetName(self.getCurrentVolumeNode().GetName() + "Segmentation")
+            
+            if self.ui.comboBox.currentIndex == 0 :
+                self.onProgressInfo("Loading inference results...")
+                segmentation = self.logic.loadSegmentation()
+                segmentation.SetName(self.getCurrentVolumeNode().GetName() + "Segmentation")
+            else :
+                self.logic.moveSegmentationFromNNUNetToFolder(self.ui.outputFolder.text)
             self._reportFinished("Inference ended successfully.")
         except RuntimeError as e:
             self._reportError(f"Inference ended in error:\n{e}")
@@ -231,3 +244,6 @@ class Widget(qt.QWidget):
     @staticmethod
     def moveTextEditToEnd(textEdit):
         textEdit.verticalScrollBar().setValue(textEdit.verticalScrollBar().maximum)
+
+    def _changePage(self,idx):
+        self.ui.stackedWidget.setCurrentIndex(idx)
